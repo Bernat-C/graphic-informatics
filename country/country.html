@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+
+    <meta charset="utf-8">
+    
+    <title> Pràctica 3 </title>
+    
+    <style type="text/css">
+      canvas {border: 1px solid rgb(155, 153, 153);}
+      body, html {
+          margin: 0;
+          padding: 0;
+          overflow: hidden;
+      }
+      .container {
+        margin-left: 50px;
+          display: flex;
+          flex-direction: row;
+          justify-content: flex-start;
+          align-items: center;
+      }
+      .container2 {
+          display: flex;
+          flex-direction: row;
+          justify-content: flex-start;
+          align-items: center;
+      }
+      .square {
+        position: relative;
+        padding: 4px; /* Adjust padding as needed to define the square size */
+        display: inline-block;
+        background-color: lightgray; /* Color of the square */
+        margin-right: 5px; /* Adjust the space between the square and the letter */
+        text-align: center;
+        line-height: 20px; /* Should match the height to center the text */
+        font-size: 16px; /* Adjust font size of the letter */
+        font-weight: bolder;
+      }
+      .mg {
+          margin-right: 10px;
+          margin-top: 10px;
+      }
+    </style>
+
+    <script id="myVertexShader" 
+          type="x-shader/x-vertex">#version 300 es
+
+	    uniform mat4 projectionMatrix;
+      uniform mat4 modelViewMatrix;
+      uniform   mat3 normalMatrix;
+      
+      in vec3 VertexPosition;
+      in vec3 VertexNormal;
+      out vec3 N;
+      
+      struct MaterialData {
+        vec3 Ka;       // Ambiente
+        vec3 Kd;       // Difusa
+        vec3 Ks;       // Especular
+        float alpha;   // Brillo
+      };
+      uniform MaterialData Material;
+      
+      void main()  {
+
+        N          = normalize(normalMatrix * VertexNormal);
+        //N          = normalize(VertexNormal);
+        vec4 ecPosition = modelViewMatrix * vec4(VertexPosition,1.0);
+        vec3 ec         = vec3(ecPosition);
+
+		    gl_Position = projectionMatrix * ecPosition;        
+      }
+    
+    </script>
+    
+    <script id="myFragmentShader" 
+          type="x-shader/x-fragment">#version 300 es
+
+      precision mediump float;
+
+      //in  vec4 colorOut;
+      uniform int drawType;
+      in vec3 N;
+      out vec4 fragmentColor;
+            
+      void main() {
+        if(drawType == 1)
+          fragmentColor = vec4(0.0, 0.0, 0.0, 1.0);
+        else 
+          fragmentColor = vec4(N*0.5,1.0);
+      }
+    
+    </script>   
+    
+  </head>
+
+  <body>
+    <div class="container2">
+      <div>
+        <canvas id="myCanvas" width="800" height="800">
+          El Navegador no soporta HTML5
+        </canvas>
+
+        <div class="container">
+          <select class="mg" id="displayType" onchange="changeSelectType()">
+            <option value="0"> Wireframe </option>
+            <option value="1"> Solid </option>
+            <option value="2" selected> Wireframe + Solid </option>
+          </select>
+          <div style="padding: 3%">
+            <input type="text" id="newPointName" placeholder="Name of the new point">
+            <button id="submitButton" onclick="clickAddPoint();">Add Point</button>
+            <select class="mg" id="pointList" onchange="loadPoint()">
+              <option></option>
+            </select>
+          </div>
+          <div >
+            <button id="lessSpeed" onclick="speed(0)">&minus; speed</button>
+            <button id="moreSpeed" onclick="speed(1)">&plus; speed</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-left: 50px;">
+        <!-- To debug -->
+        <div hidden> PHI: <div id="myPhi"></div> <br>
+        TETHA: <div id="myZeta"></div> <br>
+        EYE: <div id="eye"></div> <br>
+        CENTER: <div id="center"></div> <br></div>
+        <h1>Informe:</h1>
+        <p>L'objectiu d'aquesta pràctica era implementar un navegador de càmera de tipus FPS. El que s'ha fet és crear un escenari i afegir-hi diferents objectes 3D. S'han creat hitboxes i físiques de contacte així com físiques de caiguda.</p>
+        <p>Si l'usuari surt del pla verd (el terra de l'escenari) caurà fins l'infinit. Per tornar a l'escenari pot utilitzar la teletransportació a un punt.</p>
+        <p>A la part inferior del visor pot trovar diferents controls:</p>
+        <ul>
+          <li>El primer selector serveix per canviar el mode de visualització. Oferim tres modes possibles de visualització: només Wireframes, només sòlid i sòlid + wireframes.</li>
+          <li>En segon lloc donem l'opció de crear nous punts. Per fer-ho caldrà que l'usuari entri un nom pel nou punt i a continuació premi "Add Point".</li>
+          <li>El següent selector conté tots els punts afegits per l'usuari, a més d'un punt inicial que vé per defecte que equival al punt d'inici de l'aplicació. Per teletransportar-se a un punt cal fer click sobre el punt al que es vol viatjar.
+            Els punts emmagatzemen informació de la posició, la inclinació de la camera i també la velocitat a la que va l'usuari en el moment de guardar el punt.
+          </li>
+          <li>Per modificar la velocitat a la que va l'usuari els següents botons serveixen per incrementar i decrementar-la. La velocitat només podrà ser positiva.</li>
+        </ul>
+        <p>Pel que fa a la generació d'objectes, al llarg de l'escenari es podrà trovar els següents objectes 3D: una casa, una esglèsia, tres roques/muntanyes de roca, un piano i un sofa. A més també existeix un bosc generat aleatòriament amb arbres de tres tipus diferents i col·locats en posicions que varien en funció de l'aleatorietat. Això vol dir que el bosc és lleugerament diferent a cada execució del mapa.</p>
+        <p>Existeix una Animació del bosc perquè es noti l'efecte del vent, que fa moure els arbres.</p>
+        <p>A més de moure's per l'escenari l'usuari també pot canviar el fov de la seva càmera. Ho pot fer prement la tecla shift i movent la roda del ratolí sense deixar-lo anar.</p>
+        <h1>Controls:</h1>
+        <p><div class="square">W</div> - Go forward</p>
+        <p><div class="square">A</div> - Go left</p>
+        <p><div class="square">S</div> - Go backwards</p>
+        <p><div class="square">D</div> - Go right</p><br>
+        <p><div class="square">Click + Mouse</div> - Look around</p>
+        <p><div class="square">Shift + Wheel</div> - Change fov</p>
+
+        
+        Bernat Comas Machuca<br>
+        u1972813<br>
+        Informàtica Gràfica: Pràctica 2<br>
+        </ul>
+      </div>
+    </div>
+    
+
+    <script src = "gl-matrix-min.js"></script>
+    <script src = "primitivasGN.js"></script>
+    <script src = "materiales.js"></script>
+    <script src = "camera.js"></script>
+    <script src = "plane.js"></script>
+
+    <script src = "json models/arbre.json"></script>
+    <script src = "json models/arbre2.json"></script>
+    <script src = "json models/arbre3.json"></script>
+    <script src = "json models/casa.json"></script>
+    <script src = "json models/esglesia.json"></script>
+    <script src = "json models/rock.json"></script>
+    <script src = "json models/piano.json"></script>
+    <script src = "json models/sofa.json"></script>
+    <script src = "jsonobject.js"></script>
+
+    <script src = "country.js"></script>
+
+  </body>
+
+</html>

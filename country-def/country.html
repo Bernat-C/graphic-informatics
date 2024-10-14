@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+
+    <meta charset="utf-8">
+    
+    <title> Pràctica 4 </title>
+    
+    <style type="text/css">
+      canvas {border: 1px solid rgb(155, 153, 153);}
+      body, html {
+          margin: 0;
+          padding: 0;
+      }
+      .container {
+        margin-left: 50px;
+          display: flex;
+          flex-direction: row;
+          justify-content: flex-start;
+          align-items: center;
+      }
+      .container2 {
+          display: flex;
+          flex-direction: row;
+          justify-content: flex-start;
+          align-items: center;
+      }
+      .light-row {
+        margin-bottom: 10px;
+      }
+      .mg {
+          margin-right: 10px;
+          margin-top: 10px;
+      }
+      .square {
+        position: relative;
+        padding: 4px; /* Adjust padding as needed to define the square size */
+        display: inline-block;
+        background-color: lightgray; /* Color of the square */
+        margin-right: 5px; /* Adjust the space between the square and the letter */
+        text-align: center;
+        line-height: 20px; /* Should match the height to center the text */
+        font-size: 16px; /* Adjust font size of the letter */
+        font-weight: bolder;
+      }
+    </style>
+
+    <script id="myVertexShader" 
+          type="x-shader/x-vertex">#version 300 es
+
+	    uniform mat4 projectionMatrix;
+      uniform mat4 modelViewMatrix;
+      uniform   mat3 normalMatrix;
+      
+      in vec3 VertexPosition;
+      in vec3 VertexNormal;
+      in vec2 VertexTexcoords;
+
+      out vec3 N, ec;
+      out vec2 texCoords;
+            
+      void main()  {
+
+        N          = normalize(normalMatrix * VertexNormal);
+        vec4 ecPosition = modelViewMatrix * vec4(VertexPosition,1.0);
+        ec         = vec3(ecPosition);
+
+		    gl_Position = projectionMatrix * ecPosition;      
+        texCoords       = VertexTexcoords;  
+      }
+    
+    </script>
+    
+    <script id="myFragmentShader" 
+          type="x-shader/x-fragment">#version 300 es
+
+      precision mediump float;
+
+      struct LightData {
+        vec3 Position; // Posición en coordenadas del ojo
+        vec3 La;       // Ambiente
+        vec3 Ld;       // Difusa
+        vec3 Ls;       // Especular
+        float Intensity; // Intensity
+      };
+      uniform LightData Lights[10];
+      uniform int nLights;
+
+      struct MaterialData {
+        vec3 Ka;       // Ambiente
+        vec3 Kd;       // Difusa
+        vec3 Ks;       // Especular
+        float alpha;   // Brillo
+      };
+      uniform MaterialData Material;
+      
+      uniform vec2 Scale;     // numero de agujeros
+      uniform vec2 Threshold; // para el tamaño de los agujeros
+
+      uniform sampler2D myTexture;
+      uniform float     repetition;
+      uniform int drawType;
+
+      in vec3 N, ec;
+      in vec2 texCoords;
+      out vec4 fragmentColor;
+
+      vec3 phong (vec3 N, vec3 L, vec3 V, int i) {
+        
+        vec3  ambient  = Material.Ka * Lights[i].La;
+        vec3  diffuse  = vec3(0.0);
+        vec3  specular = vec3(0.0);
+        
+        float NdotL    = dot (N,L);
+        
+        if (NdotL > 0.0) {
+          vec3  R       = reflect(-L, N);;
+          float RdotV_n = pow(max(0.0, dot(R,V)), Material.alpha);
+          
+          diffuse  = NdotL   * (Lights[i].Ld * Material.Kd);
+          specular = RdotV_n * (Lights[i].Ls * Material.Ks);
+        }
+        
+        return (ambient + diffuse + specular) * Lights[i].Intensity;
+        
+      }
+            
+      void main() {
+        if(drawType == 1)
+          fragmentColor = vec4(0.0, 0.0, 0.0, 1.0);
+        else if(drawType == 2){
+          vec3 n = normalize(N);
+          vec3 V = normalize(-ec);
+          vec3 accum = vec3(0.0);
+
+          for(int i=0; i<nLights; i++){
+            
+            vec3 L = normalize(Lights[i].Position - ec);
+            accum += phong(n,L,V,i);
+          }
+          
+          fragmentColor = texture(myTexture, texCoords * repetition) * vec4(accum, 1.0) * 1.6;
+        }
+        else if(drawType == 3){
+          float ss = fract(texCoords.s * Scale.s);
+          float tt = fract(texCoords.t * Scale.t);
+
+          if ((ss > Threshold.s) && (tt > Threshold.t))
+            discard;
+          
+          vec3 n = normalize(N);
+          vec3 V = normalize(-ec);
+          vec3 accum = vec3(0.0);
+
+          for(int i=0; i<nLights; i++){
+            
+            vec3 L = normalize(Lights[i].Position - ec);
+            accum += phong(n,L,V,i) * 1.4, 1.0;
+          }
+          
+          fragmentColor = vec4(accum, 1.0);
+        }
+        else {
+          vec3 n = normalize(N);
+          vec3 V = normalize(-ec);
+          vec3 accum = vec3(0.0);
+
+          for(int i=0; i<nLights; i++){
+            
+            vec3 L = normalize(Lights[i].Position - ec);
+            accum += phong(n,L,V,i);
+          }
+          
+          fragmentColor = vec4(accum, 1.0);
+        }
+      }
+    
+    </script>   
+    
+  </head>
+
+  <body>
+    <div class="container2">
+      <div>
+        <canvas id="myCanvas" width="800" height="800">
+          El Navegador no soporta HTML5
+        </canvas>
+
+        <div class="container">
+          <select class="mg" id="displayType" onchange="changeSelectType()">
+            <option value="0"> Wireframe </option>
+            <option value="1" selected> Solid </option>
+            <option value="2"> Wireframe + Solid </option>
+          </select>
+          <div style="padding: 3%">
+            <input type="text" id="newPointName" placeholder="Name of the new point">
+            <button id="submitButton" onclick="clickAddPoint();">Add Point</button>
+            <select class="mg" id="pointList" onchange="loadPoint()">
+              <option></option>
+            </select>
+          </div>
+          <div >
+            <button id="lessSpeed" onclick="speed(0)">&minus; speed</button>
+            <button id="moreSpeed" onclick="speed(1)">&plus; speed</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-left: 50px; margin-top: 50px;">
+        <div class="light-row">
+          <span style="margin-right: 50px;"><b>Light 1:</b></span>
+          <span>La</span>
+          <input type="color" id="La1" value="#ffffff">
+          <span>Ld</span>
+          <input type="color" id="Ld1" value="#ffffff">
+          <span>Ls</span>
+          <input type="color" id="Ls1" value="#ffffff">
+          <span>Intensity</span>
+          <input type="range" id="Li1" name="lightIntensity" min="0" max="2" value="1" step="0.01"> &nbsp;<br>
+        </div>
+      
+        <div class="light-row">
+          <span style="margin-right: 50px;"><b>Light 2:</b></span>
+          <span>La</span>
+          <input type="color" id="La2" value="#ffffff">
+          <span>Ld</span>
+          <input type="color" id="Ld2" value="#ffffff">
+          <span>Ls</span>
+          <input type="color" id="Ls2" value="#ffffff">
+          <span>Intensity</span>
+          <input type="range" id="Li2" name="lightIntensity" min="0" max="2" value="1" step="0.01"> &nbsp;<br>
+        </div>
+      
+        <div class="light-row">
+          <span style="margin-right: 50px;"><b>Light 3:</b></span>
+          <span>La</span>
+          <input type="color" id="La3" value="#ffffff">
+          <span>Ld</span>
+          <input type="color" id="Ld3" value="#ffffff">
+          <span>Ls</span>
+          <input type="color" id="Ls3" value="#ffffff">
+          <span>Intensity</span>
+          <input type="range" id="Li3" name="lightIntensity" min="0" max="2" value="1" step="0.01"> &nbsp;<br>
+        </div>
+        <br>
+        Textura <strong>sofa</strong>: <input type="file"  name="textureSelector" accept="image/*">
+        <br>
+        <br>
+        Textura <strong>roques</strong>: <input type="file"  name="textureSelector" accept="image/*">
+        <br>
+        <br>
+        Textura <strong>edificis</strong>: <input type="file"  name="textureSelector" accept="image/*">
+        <br>
+        <br>
+        Textura <strong>roca amb reixes</strong>:
+        <br>
+        <input type="range" id="ScaleS" name="range" min="1" max="30" value="15"> &nbsp;Scale S<br>
+        <input type="range" id="ScaleT" name="range" min="1" max="30" value="15"> &nbsp;Scale T<br>
+        <input type="range" id="ThresholdS" name="range" min="1" max="100" value="50"> &nbsp;Threshold S<br>
+        <input type="range" id="ThresholdT" name="range" min="1" max="100" value="50"> &nbsp;Threshold T<br>
+        <br>
+      </div>
+    </div>
+    
+
+    <script src = "gl-matrix-min.js"></script>
+    <script src = "primitivasGN.js"></script>
+    <script src = "materiales.js"></script>
+    <script src = "light.js"></script>
+    <script src = "camera.js"></script>
+    <script src = "figure.js"></script>
+
+    <script src = "json models/arbre.json"></script>
+    <script src = "json models/arbre2.json"></script>
+    <script src = "json models/arbre3.json"></script>
+    <script src = "json models/casa.json"></script>
+    <script src = "json models/esglesia.json"></script>
+    <script src = "json models/rock.json"></script>
+    <script src = "json models/piano.json"></script>
+    <script src = "json models/sofa.json"></script>
+    <script src = "jsonobject.js"></script>
+
+    <script src = "country.js"></script>
+
+    <div style="margin-left: 50px; margin-top: 50px;">
+      <h1>Informe:</h1>
+        <p>L'objectiu d'aquesta pràctica era implementar un escenari 3D il·luminat amb diverses fonts de llum i textures.</p>
+        <p>Si l'usuari surt del pla verd (el terra de l'escenari) caurà fins l'infinit. Per tornar a l'escenari pot utilitzar la teletransportació a un punt.</p>
+        <p>A la part inferior pot trobar els diferents controls referents a la part de la pràctica anterior:</p>
+        <ul>
+          <li>El primer selector serveix per canviar el mode de visualització. Oferim tres modes possibles de visualització: només Wireframes, només sòlid i sòlid + wireframes.</li>
+          <li>En segon lloc donem l'opció de crear nous punts. Per fer-ho caldrà que l'usuari entri un nom pel nou punt i a continuació premi "Add Point".</li>
+          <li>El següent selector conté tots els punts afegits per l'usuari, a més d'un punt inicial que vé per defecte que equival al punt d'inici de l'aplicació. Per teletransportar-se a un punt cal fer click sobre el punt al que es vol viatjar.
+            Els punts emmagatzemen informació de la posició, la inclinació de la camera i també la velocitat a la que va l'usuari en el moment de guardar el punt.
+          </li>
+          <li>Per modificar la velocitat a la que va l'usuari els següents botons serveixen per incrementar i decrementar-la. La velocitat només podrà ser positiva.</li>
+        </ul>
+        <p>Pel que fa a la generació d'objectes, al llarg de l'escenari es podrà trovar els següents objectes 3D: una casa, una esglèsia, tres roques/muntanyes de roca, un piano i un sofa. A més també existeix un bosc generat aleatòriament amb arbres de tres tipus diferents i col·locats en posicions que varien en funció de l'aleatorietat. Això vol dir que el bosc és lleugerament diferent a cada execució del mapa.</p>
+        <p>Existeix una Animació del bosc perquè es noti l'efecte del vent, que fa moure els arbres.</p>
+        <p>A més de moure's per l'escenari l'usuari també pot canviar el fov de la seva càmera. Ho pot fer prement la tecla shift i movent la roda del ratolí sense deixar-lo anar.</p>
+        <p>S'ha implementat tres llums, que es poden identificar dins l'escenari perquè en el punt on es troben hi apareix un cub negre. Dins el codi es defineixen totes a les línies 16, 17 i 18 des d'on es molt senzill canviar totes les seves propietats.</p>
+        <p>Tots els objectes menys el terra tenen textures. Aquestes es llegeixen des d'un servidor a l'iniciar l'aplicació.</p>
+        <p>Tots els objectes menys la roca que és una reixa tenen textures generades a partir d'imatges.</p>
+        <p>La roca que té textura reixa té una textura generada proceduralment.</p>
+        <p>A la part dreta del visor hi apareixen els controls referents a la part de la pràctica 4:</p>
+        <ul>
+          <li>En primer lloc hi tenim els controls de les tres llums. Per cada llum podem canviar la component La (Llum ambient), la component Ld (Llum difusa), i la component Ls (Llum especular). A més també tenim un selector d'intensitat que permet canviar la intensitat de les tres components de cada una de les llums que tenim.</li>
+          <li>Seguidament tenim els selectors de textura. Utilitzant aquests selectors es poden sobreescriure les textures que utilitzen el sofa, les roques (excepte la que té una textura procedural) i els edificis. Aquestes noves textures han de ser imatges qualsevols.</li>
+          <li>Finalment l'últim apartat permet modificar els paràmetres de generació de la roca generada proceduralment per tal de canviar l'estil de les reixes.</li>
+        </ul>
+        <p>Per apagar un dels llums només cal baixar la intensitat al mínim.</p>
+        
+        <h1>Controls:</h1>
+        <p><div class="square">W</div> - Go forward</p>
+        <p><div class="square">A</div> - Go left</p>
+        <p><div class="square">S</div> - Go backwards</p>
+        <p><div class="square">D</div> - Go right</p><br>
+        <p><div class="square">Click + Mouse</div> - Look around</p>
+        <p><div class="square">Shift + Wheel</div> - Change fov</p>
+
+        
+        Bernat Comas Machuca<br>
+        u1972813<br>
+        Informàtica Gràfica: Pràctica 4<br>
+        </ul>
+      </div>
+
+  </body>
+
+</html>
